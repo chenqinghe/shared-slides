@@ -1,0 +1,133 @@
+# Go 泛型介绍
+
+清和
+2022-03-29
+chenqh721@foxmail.com
+https://github.com/chenqinghe
+
+
+## About the share
+
+原文地址： [Type Parameters Proposal](https://go.googlesource.com/proposal/+/refs/heads/master/design/43651-type-parameters.md)
+
+https://go.googlesource.com/proposal/+/refs/heads/master/design/43651-type-parameters.md
+
+- 当前版本的Go(1.18)并没有完全实现提案内容，可能有些许出入，会在后续版本中实现
+
+本分享适用人群：
+- 英文阅读有障碍的人群
+- 喜欢看视频学习知识的人
+- 晚上睡不着想找点白噪音的人
+
+
+
+## Agenda
+- Why generic
+- Type parameter
+- Constraint
+- More about type sets
+
+
+## Why generic
+
+## Why generic
+
+.code codes/atomic.go /OMIT/,/OMIT/
+
+- 大体逻辑都类似，仅参数类型不同
+- 每种类型都得实现一遍
+
+## Why generic
+
+.code codes/atomic.go /INTR OMIT/,/INTR OMIT/
+
+- 需要写很多脏代码
+- 无法在编译期检查出错误
+- 类型转换影响性能
+
+
+## How Generics (overview)
+
+## Type parameters
+
+泛型编程能够以一个抽象的类型的形式表示函数和数据结构，这个抽象的类型叫做`type parameter`（参数化类型）. 在实际运行泛型代码的时候，会以实际类型来替换这个参数化类型。
+
+.code codes/print.go /PRINT OMIT/,/PRINT OMIT/
+
+在Go中，希望每个标识符都能够通过某种方式来进行申明。
+
+那么，如何来申明类型T？
+
+
+## Type parameter
+
+- 在普通参数前面
+- 使用方括号[ ]包围
+- 类型参数也有「元类型」，也即constraint（约束）
+
+.code -edit codes/print.go /GEN OMIT/,/GEN OMIT/
+
+以上示例代码中：
+
+- `T` 是一个**type parameter**
+- **any**是一个**constraint**，意思是T可以是任意类型
+- `T` 可以用来规定参数s的类型，也可以用在函数体内
+- 不同于普通参数，类型参数名`T` 不可省略
+
+## Type parameter
+
+调用泛型函数
+
+.play codes/print.go /CALL OMIT/,/CALL OMIT/
+
+- 需指定类型参数，类型参数写在中括号内
+- 有多个类型参数时，使用逗号分隔
+
+.code codes/print.go /CALL MULTI PARAMS OMIT/,/CALL MULTI PARAMS OMIT/
+
+## Constraint
+
+## Constraint
+接下来来个稍微复杂点的例子：
+
+.play codes/stringfy.go /START OMIT/,/END OMIT/
+
+- T 可以是任意类型
+- 类型 T 可能并没有String方法
+
+**以上代码并不能运行**
+
+
+## Constraint
+
+在其他有泛型的语言中也会出现类似的情况。
+
+例如，在C++中。
+
+调用v.String()是允许的，在编译过程中，如果发现实际调用时传入的类型实参T没有String方法，那么会报错误，如果有String方法，可以正常编译。
+
+也就是说：**C++实际上对传入类型是没有明确限制的**
+
+
+## Constraint
+
+出于语言风格考虑，Go语言不会采用上述方案。
+
+- In Go we don't refer to names, such as, in this case, String, and hope that they exist. Go resolves all names to their declarations when they are seen.
+- Another reason is that Go is designed to support programming at scale.
+
+Details see: [Type Parameters Proposal # Constraint](https://go.googlesource.com/proposal/+/refs/heads/master/design/43651-type-parameters.md#constraints)
+
+通常，我们希望泛型代码中的类型参数满足一定的条件，这些条件被称为约束（Constraints）。
+
+Constraints必须能够同时限制调用方传入的类型参数以及泛型函数的具体实现：
+1. **调用泛型函数时传入的类型实参必须满足Constraints**
+2. **实现泛型函数时必须用Constraints允许的方式来使用这些值(e. g. + - * / > ....)**
+
+
+## Summary
+综上：
+- 函数除了普通参数外，可以额外的类型参数，类型参数使用`[]`包围
+- 这个类型参数可以作为普通参数的类型，也可以直接在函数体内使用
+- 每个参数类型都有个约束，就像普通参数都对应一个类型
+
