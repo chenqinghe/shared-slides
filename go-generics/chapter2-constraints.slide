@@ -1,0 +1,468 @@
+# Go generic
+
+清和
+2022-03-31
+
+
+## Constraint
+
+
+## Constraint
+
+在继续深入讨论约束之前，首先看一个特殊的constraint：**any**，表示类型参数允许是任何类型。any约束下各类型（T）允许的操作有：
+
+- 申明对应类型的变量
+- 给此类型变量重新赋一个相同类型的值
+- 将此类型变量传给其他函数或者作为返回值返回
+- 取此类型变量的地址
+- 强制类型转换为interface{}类型或者赋值给interface{}类型的变量
+- 将类型T强转为类型T(允许但是没啥用)
+- 使用类型断言将interface转换为类型T
+- 在type switch中使用此类型作为其中一个case
+- 定义及使用此类型的复合类型（例如切片）
+- 将此类型作为预定义函数的参数，比如new函数
+
+
+## Defining constraints
+constraints的作用：
+- 规定一些类型参数可以调用的方法
+
+interface即可满足上面的需求，因此继续沿用interface类型来定义一个constraint。
+
+还是以Stringify为例，定义一个constraint:
+
+
+.code codes/stringify.go /STRINGER OMIT/,/STRINGER OMIT/
+
+- 与接口定义一样，定义一些方法集
+- 类型参数必须实现interface
+
+
+## any constraints
+
+- any是一个constraint，表示类型参数可以是任何类型
+- constraint是个interface类型，类型参数必须实现interface
+
+推断出
+
+.code codes/any.go /ANY OMIT/,/ANY OMIT/
+
+
+**any的本质是个空的interface**
+
+
+- any一开始被设计为只允许用在泛型中的类型约束上，后续经社区讨论修改后可代替interface{}用在任何地方 [issue#33232](https://github.com/golang/go/issues/33232)
+- any是个预定义类型，和int、string等类似
+- 可以被覆盖，不会影响兼容性
+
+
+## Using a constraint
+
+- 单个类型参数
+
+.code codes/use_constraints.go /STR OMIT/,/STR OMIT/
+
+
+## Using a constraint
+多个类型参数
+
+- 相同约束
+
+.code codes/use_constraints.go /PRT OMIT/,/PRT OMIT/
+
+- 不同约束
+
+.code codes/use_constraints.go /CONCAT OMIT/,/CONCAT OMIT/
+
+## Generic types
+
+## Generic types
+
+不光有泛型函数，也有泛型类型，在定义一些通用类型时可以用到。
+
+
+.code codes/generic_stack.go /STACK OMIT/,/STACK OMIT/
+
+在使用泛型类型时，必须提供类型实参，这一操作被称为「类型实例化」。
+
+.code codes/generic_stack.go /INTSTACK OMIT/,/INTSTACK OMIT/
+
+其他使用和普通类型没有区别
+
+.code codes/generic_stack.go /TYPE OMIT/,/TYPE OMIT/
+
+## Generic types 
+泛型类型和一般类型一样，也可以定义方法。
+
+.code codes/generic_stack.go /METHOD OMIT/,/METHOD OMIT/
+
+- 声明方法时，receiver类型的类型参数**必须**与声明receiver类型时定义的参数**个数相同**
+- 方法的类型参数实参名称和类型定义时的类型参数形参**名称不需要相同**，在方法中没有使用到类型时，名称可以为 "_"
+- 类型参数后面**没有**constraints
+
+## Generic types 
+方法的声明中，不能包含类型参数。以下代码均编译不通过：
+
+.play codes/method.go /START OMIT/,/END OMIT/
+
+至于原因，请见后续。
+
+## Operators
+
+
+## Operators
+由前面的例子可以看出，使用interface作为constraints时，只规定了一系列可调用的方法集。
+到目前为止，泛型方法能够做的事情，除了任何类型都能做的事情外，也就只有
+方法调用了。
+
+但是方法调用并不能够完美实现某些需求。如下：
+
+.code codes/operator.go /MIN OMIT/,/MIN OMIT/
+
+
+不是所有的类型都支持`<`操作符，而且`<`不是一个方法，无法通过interface来实现。
+
+## Operators
+
+- 除了两种例外情况（后面会讲），所有的四则运算、大小比较、逻辑运算只允许被用在预定义类型或者底层为预定义类型的自定义类型中。
+- instead of saying which operators a constraint should support, we can say which types a constraint should accept.
+（与其规定一个约束能够使用哪些操作，不如规定一个约束可以接受哪些类型）
+
+这一想法可以通过定义一个约束的类型集来实现。
+
+## Type sets
+
+## Type sets
+
+每种类型都有相关联的类型集：
+- 对于非接口类型T，其对应的类型集为{T}，集合中仅包含类型T自己
+- 对于接口类型，其对应的类型集为所有实现了接口的类型（无限个）
+
+接口内包含元素：
+1. 函数签名
+2. 其他接口
+
+.code codes/interface.go /INTERFACE OMIT/,/INTERFACE OMIT/
+
+
+
+## Type sets
+
+.image type_set.png  400 600
+
+**接口类型的类型集为接口类型内各元素的类型集的交集**
+
+## Constraint elements
+
+## Constraint elements
+在interface类型中额外定义一些元素作为约束，这些元素包括：
+
+- 具体类型
+- 近似类型
+- 联合类型
+
+## Arbitrary type constraint element
+
+可以在interface中嵌入任意类型
+
+.code codes/type_sets.go /TYPE OMIT/,/TYPE OMIT/
+
+但是，类型不能是type parameter
+
+.code codes/type_sets.go /INVALID OMIT/,/INVALID OMIT/
+
+
+## Approximation constraint element(近似类型)
+
+**定义类型和非定义类型（defined type and undefined type）**
+
+一个定义类型是一个在某个类型定义声明中定义的类型。
+
+所有的基本类型都是定义类型。一个非定义类型一定是一个组合类型。
+
+**底层类型（underlying type）**
+
+在Go中，每个类型都有一个底层类型。规则：
+- 一个内置基本类型的底层类型为它自己。
+- unsafe标准库包中定义的Pointer类型的底层类型是它自己。（至少我们可以认为是这样。事实上，关于unsafe.Pointer类型的底层类型，官方文档中并没有清晰的说明。我们也可以认为unsafe.Pointer类型的底层类型为*T，其中T表示一个任意类型。）
+- 一个非定义类型（必为一个组合类型）的底层类型为它自己。
+- 在一个类型声明中，新声明的类型和源类型共享底层类型。
+
+来源： [go101#类型系统概述](https://gfw.go101.org/article/type-system-overview.html)
+
+## Approximation constraint element
+
+如果某个类型T1，底层类型为类型T2，则这个类型T1被称为类型T2的近似类型。一个类型的近似类型可以有多个，这些所有的近似类型集合可以
+用符号`~`来表示。
+
+例如：
+
+.code codes/type_sets.go /APPRO OMIT/,/APPRO OMIT/
+
+约束AnyInteger表示的类型集为所有底层类型为int的类型，其中包括MyInt类型，因此MyInt可以作为type argument参数。
+
+因为~T表示所有底层类型为T的类型，当然类型T的底层类型也应该是自己，满足这个条件的类型有：
+- 非定义类型
+- 大部分预定义类型，比如int或者string(不包括error类型)
+
+## Approximation constraint element
+在近似类型中，类型T不能为类型参数或者interface类型。
+
+.code codes/type_sets.go /ALL INVALID OMIT/,/ALL INVALID OMIT/
+
+## Union constraint element(联合类型)
+
+
+## Union constraint element
+第三种允许使用的约束元素是**联合类型**。这是一种新的语法结构，用竖线（|）将一系列约束元素分隔。联合类型所代表的类型集是各约束元素类型集的并集，并且各
+约束元素不可以重复。
+
+.code codes/type_sets.go /ONION EXAMPLE OMIT/,/ONION EXAMPLE OMIT/
+
+
+## Operations based on type sets
+
+提出type sets的目的就是允许泛型函数使用'<'、'>'之类的运算符。
+
+泛型函数中允许的操作是type sets中所有的类型都允许的操作。因此，一般来说，**约束中
+包括的类型越多，那么允许的操作就越少，包括的类型越少，则允许的操作就越多**。
+
+## Operations based on type sets
+
+回过头再来看之前的`Min`函数的例子，可以使用如下的约束：
+
+.code codes/operator.go /OPERATOR CONSTRAINT OMIT/,/OPERATOR CONSTRAINT OMIT/
+
+现在，下面的代码就可以运行了
+
+.code codes/operator.go /OPERATOR MIN VALID OMIT/,/OPERATOR MIN VALID OMIT/
+
+## Comparable types in constraints
+
+之前我们说，操作符只能被用于语言预定义的类型或底层类型为语言预定义类型的类型之间，但是有两个例外，这两个例外就是`==`和`!=`。
+
+这两个操作符允许被用在struct、array和接口类型之间。但是我们无法定义一个约束，用来包含这些所有可以进行比较的类型。
+
+## Comparable types in constraints
+
+因此，设计了一个内置的约束：`comparable`。这个约束所包含的类型集为所有可以进行`==`和`!=`操作的类型。
+
+例如：
+
+.code codes/comparable.go /COMPARABLE EXAMPLE OMIT/,/ COMPARABLE EXAMPLE OMIT/
+
+
+## Comparable types in constraints
+
+comparable作为一个约束，它也可以被嵌入在其他约束内。
+
+.code codes/comparable.go /ComparableHasher OMIT/,/ComparableHasher OMIT/
+
+满足上面约束的类型必须满足两个条件：
+- 必须可以比较
+- 必须有Hash() uintptr方法
+
+
+## Type inference
+
+## Type inference
+在很多情况下，可以使用类型推断来避免显示指定一个或多个类型参数。可以使用**函数参数类型推断**来根据非类型参数的类型来确定类型参数的值。也可以使用**约束类型推断**来根据已知的参数类型确定其他约束的类型参数值。
+
+当省略的类型参数可以被推断时，如果只指定部分类型实参，则这部分类型实参依次作为类型形参的前面部分参数值。
+
+.code codes/type_inference.go /MAP OMIT/,/MAP OMIT/
+
+以下的调用方式都是正确的：
+
+
+.code codes/type_inference.go /MAP CALL OMIT/,/MAP CALL OMIT/ 
+
+## Type inference
+
+当类型不能被推断的时候，省略类型参数会报错。
+
+//例如：
+
+//.code codes/type_inference.go /ERR OMIT/,/ERR OMIT/
+
+
+## Type unification (类型归并)
+
+类型推断的基础是类型归并。类型归并用于两种类型之间，描述一种类型是否包含在另一种类型中。其中至少一种是类型参数或者包含类型参数。
+
+类型归并比较类型间的结构，如果除了类型参数以外的部分结构和类型一致，则可以成功归并。
+
+
+举个例子：
+
+如果T1和T2是类型参数，[]map[int]bool可以被归并为以下方式：
+- []map[int]bool
+- T1 (T1 matches []map[int]bool)
+- []T1 (T1 matches map[int]bool)
+- []map[T1]T2 (T1 matches int, T2 matches bool)
+
+（上述列表并不完全，可能存在其他归并方式）
+
+## Type unification
+
+
+
+对于[]map[int]bool类型，以下方式就是错误的归并方式：
+- int
+- struct{}
+- []struct{}
+- []map[T1]string
+
+
+## Function argument type inference
+函数参数类型推断用在进行函数调用但是没有指明类型参数的时候。类型参数的值可以通过非类型参数的类型来推断出来。
+
+仅当类型参数被用在函数的入参时，类型参数可以被推断。如果类型参数作为函数出参的类型，或者仅在函数内部使用时，无法进行推断。
+
+以下函数的类型参数就无法通过函数参数类型推断来推断：
+
+.code codes/type_inference.go /CANNOT INFERENCE OMIT/,/CANNOT INFERENCE OMIT/
+
+## Function argument type inference
+
+以之前的例子介绍类型推断过程：
+
+.code codes/print.go /CALL TYPE OMIT/,/CALL TYPE OMIT/
+
+要推断类型参数的值，我们需要对函数普通参数的类型和函数的类型参数进行归并。从调用方的角度，我们知道普通函数参数的类型，在上面的例子中就是[]int。
+在函数定义的角度，我们知道函数的参数类型是[]T。
+
+[]int可以与类型[]T进行归并，并且此时T的类型是int。因此可以推断出类型参数的值实际上是int。即完整的调用应该是
+
+.code codes/print.go /COMPLETE CALL OMIT/,/COMPLETE CALL OMIT/
+
+## Function argument type inference
+
+函数参数类型推断分为两步进行。
+
+0. 首先忽略调用方传入的未定义类型常量以及在函数定义中对应的类型，这些常量的类型会在后面的步骤进行确定。
+
+1. 对剩余的类型进行归并处理，会得到函数类型参数和实参类型的对应关系，如果类型参数在函数中出现多次，那么可能会匹配到多个对应关系，如果相同的类型参数对应的实参类型不同，则报错。
+
+2. 经过第一步的处理后，如果没有未定义类型常量，或者类型参数都和普通参数的入参类型一一对应，则归并完成。如果还有未定义类型常量及对应的类型参数，则常量的类型为默认的类型，然后再对剩余类型继续进行归并。 
+
+
+## Function argument type inference
+
+以一个稍微复杂点的例子来说明类型推断过程：
+
+.code codes/type_inference.go /MAP2 OMIT/,/MAP2 OMIT/
+
+1. 归并[]int和[]F => F = int 
+2. 归并`func(int) string`和`func(F) T` => F = int, T = string 
+3. 类型参数F匹配了两次，因为两次匹配到的类型相同，都是int，因此归并成功。
+4. 可以推导出完整的函数调用应该是`Map[int,string]`
+
+## Function argument type inference
+
+参数包括未定义类型常量的示例：
+
+.code codes/type_inference.go /PAIR OMIT/,/PAIR OMIT/
+
+
+- NewPair(1, 2)  => `NewPair[int](1,2)`
+- NewPair(1, int64(2)) => `NewPair[int64](1,int64(2))`
+- NewPair(2, 2.5) => `compilation error`
+
+
+## Constraint type inference
+
+## Constraint type inference
+
+约束类型推断允许基于类型参数约束，根据一个类型参数实参推断出另外一个类型参数的值。
+
+约束类型推断有两种适用场景：
+1. 某个类型参数的约束中用到了其他类型参数
+2. 某个类型参数的约束是基于其他类型参数构成的
+
+
+约束类型推断的过程描述起来可能会比较复杂，但是通过几个典型的详细的例子，推断的过程会比较清晰。
+
+
+## Element constraint example
+
+例：实现一个函数，将切片内的所有元素都乘以2，返回新的切片。
+
+.code codes/constraint_inference.go /DOUBLE DEFINATION OMIT/,/DOUBLE DEFINATION OMIT/
+
+但是如果我们定义一个命名类型，然后再去调用呢？
+
+
+.code codes/constraint_inference.go /CALL DOUBLE ERROR OMIT/,/CALL DOUBLE ERROR OMIT/
+
+
+## Element constraint example
+引入一个新的类型参数：
+
+.code codes/constraint_inference.go /DOUBLE DEFINED OMIT/,/DOUBLE DEFINED OMIT/
+
+通过显式指定类型参数，可以得到想要的返回值类型：
+
+.code codes/constraint_inference.go /CALL DOUBLE OMIT/,/CALL DOUBLE OMIT/
+
+
+## Element constraint example
+
+那么这个函数调用是否可以简化为以下形式呢？
+
+
+.code codes/constraint_inference.go /CALL DOUBLE INFERENCE OMIT/,/CALL DOUBLE INFERENCE OMIT/
+
+答案是：**可以的**
+
+虽然是用函数参数类型推断无法完全推断出来，因为类型参数E没有入参与之进行归并，但是函数参数类型推断和约束类型推断结合起来，就可以了。
+
+1. 应用函数类型推断，可以得到{ S -> MySlice}
+2. 应用约束类型推断，归并[]E与MySlice，得到 {S -> MySlice, E -> int}
+3. 完成
+
+可以推断出完整调用：
+
+.code codes/constraint_inference.go /CALL DOUBLE INFERENCE WHOLE OMIT/,/CALL DOUBLE INFERENCE WHOLE OMIT/
+
+
+
+## Pointer method example
+
+再看另外一个例子：
+
+.code codes/constraint_inference.go /POINTER METHOD OMIT/,/POINTER METHOD OMIT/
+
+## Pointer method example
+
+调用示例：
+
+.play -edit -numbers codes/constraint_inference2.go /POINTER METHOD CALL OMIT/,/POINTER METHOD CALL OMIT/
+
+
+类型`Settable`并没有方法`Set(string)`，类型`*Settable`才有。
+
+`*Settable`类型零值为nil，调用Set方法会造成panic。
+
+
+## Pointer method example
+
+我们可以将两种类型都传：
+
+.code codes/constraint_inference3.go /SETTER2 OMIT/,/SETTER2 OMIT/
+
+调用 ：
+
+.play codes/constraint_inference3.go /SETTER2 CALL OMIT/,/SETTER2 CALL OMIT/
+
+## Pointer method example
+
+前面那样调用看起来会比较奇怪，因为需要重复传`Settable`参数，不过可以通过约束类型推断来减少重复工作。
+
+.code codes/constraint_inference3.go /SETTER3 CALL OMIT/,/SETTER3 CALL OMIT/
+
+类型推断过程：
+
+1. {T -> Settable}
+2. {T -> Settable, PT -> *T}
+3. {T -> Settable, PT -> *Settable}

@@ -1,0 +1,125 @@
+
+# More on type sets
+
+清和
+2022-03-31
+
+
+## Both elements and methods in constraints
+约束中可以同时约束元素（具体类型、近似类型、联合类型）和方法。
+
+.code codes/type_sets.go /StringableSignedInteger OMIT/,/StringableSignedInteger OMIT/
+
+满足这个约束的类型必须满足两个条件：
+1. 底层类型是int/int8/int16/int32/int64类型其中之一
+2. 这个类型必须有`String() string`方法
+
+要注意：
+
+`'~'`符号是必要的，因为int类型本身没有实现`String() string`方法，否则语法检查能通过，但是满足条件的类型集合为空。
+
+## Composite types in constraints
+
+复合类型包括以下几种：
+
+- string
+- pointer
+- array 
+- slice 
+- struct 
+- function 
+- map 
+- channel 
+
+## Composite types in constraints
+
+在约束中使用复合类型：
+
+.code codes/type_sets.go /COMPOSITE TYPE OMIT/,/COMPOSITE TYPE OMIT/
+
+## Composite types in constraints
+
+对于复合类型的使用，有个额外的限制：对于所有的类型集中的类型，只有输入以及输出类型均完全一致的操作才允许使用。
+
+例如：
+
+.code codes/type_sets.go /COMPOSITE STRUCT FIELD OMIT/,/COMPOSITE STRUCT FIELD OMIT/
+
+(当然目前即使上面例子中各个struct的x字段类型一致也无法执行，因为这个特性在1.18中已经被移除，后续版本中可能会加回来，详情见[issue#50417](https://github.com/golang/go/issues/50417)、[issue#51576](https://github.com/golang/go/issues/51576))
+
+
+
+## Type conversions
+
+如果要对两个类型参数From和To类型的变量进行类型转换，则需要From的约束所包含的所有类型均能够转换为To的约束所包含的任一类型。
+
+例如：
+
+.code codes/type_sets.go /TYPE CONVERSION OMIT/,/TYPE CONVERSION OMIT/
+
+
+## Untyped constants
+泛型函数中可能会使用到无类型常量，在使用无类型常量的时候，仅当约束中所包含的所有类型都可以正常使用无类型常量。
+
+.code codes/type_sets.go /UNTYPED CONSTANTS OMIT/,/UNTYPED CONSTANTS OMIT/
+
+
+## Type sets of embedded constraints
+
+.code codes/type_sets.go /EMBED INTERSECTION OMIT/,/EMBED INTERSECTION OMIT/
+
+
+
+## Type sets of embedded constraints
+.code codes/type_sets.go /EMBED UNION OMIT/,/EMBED UNION OMIT/
+
+## Interface types in union elements
+
+.code codes/type_sets.go /INTERFACE IN UNION OMIT/,/INTERFACE IN UNION OMIT/
+
+- 约束的类型集包括string类型以及实现了fmt.Stringer接口的所有类型
+- 除所有类型都共有的操作外，无其他特殊的允许的操作
+- 必须通过断言或者反射来使用对应的值
+
+目前版本还未实现，see [issue#49054](https://github.com/golang/go/issues/49054)，[issue#45346 (comment)](https://github.com/golang/go/issues/45346#issuecomment-862505803)
+
+## Empty type sets
+
+.code codes/type_sets.go /EMPTY TYPE SETS OMIT/,/EMPTY TYPE SETS OMIT/
+
+- 可以正常编译，但无法实例化
+- go vet 对某些能够被检测出来的情况“应该”报出错误
+
+
+## Some Issues
+
+
+## The zero value
+
+.code codes/zero_value.go /ZERO VALUE OMIT/,/ZERO VALUE OMIT/
+
+一些可行的方案：
+
+- 使用`var zero T; return zero`，与现行方案不冲突，但是需要额外的代码
+- 使用`return *new(T)`，语法比较奇怪，但是也能正常执行
+- 使用命名返回值，返回值用return即可返回零值。此种方案仅对在返回值中生效
+- 允许使用nil作为参数类型的零值返回
+- 允许使用T{}作为参数类型的零值返回
+- 允许在赋值语句（包括return以及函数调用）的右边使用`_`作为零值
+- 允许使用`return ...`来返回对应类型的零值
+
+
+## Identifying the matched predeclared type
+
+.code codes/type_assertion.go /TYPE ASSERTION OMIT/,/TYPE ASSERTION OMIT/
+
+并不想知道v的真实类型，只想知道v的底层是float32还是float64，但目前无法做到。
+
+一种解决方法是扩展switch case语法，支持`case ~float32:`类型的语句，甚至在泛型函数之外也应该可以使用这样的语法。
+
+
+## No parameterized methods
+(略)
+
+## No way to require pointer methods
+(略)
